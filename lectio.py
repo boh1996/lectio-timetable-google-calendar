@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from googleauth import google_oauth
 import config
+import itertools
 from bs4 import BeautifulSoup, SoupStrainer
 
 __author__ = 'frederik'
@@ -24,7 +25,7 @@ session.execute("CREATE TABLE IF NOT EXISTS `tasks` ( `id` int(11) NOT NULL AUTO
 tasks = session.execute("SELECT * FROM tasks")
 for task in tasks:
     # Construct URL, remember to force mobile
-    url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&forcemobile=1" %(task["school_id"], task["lectio_id"])
+    url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&forcemobile=1&week=%i" %(task["school_id"], task["lectio_id"], 382013)
 
     print("Downloading from Lectio...")
     # Download the schema from Lectio
@@ -80,7 +81,6 @@ for task in tasks:
         date = dateSections[0]
 
         # Grab the start and end time, being the second (1) and fourth (3) section
-        print dateSections
         startTime = dateSections[1]
         endTime = dateSections[3]
 
@@ -89,7 +89,7 @@ for task in tasks:
         endDateTime = time.strptime("%s %s CEST" % (date, endTime), "%d/%m-%Y %H:%M %Z")
 
         # Grab the group information
-        print topSection
+        #print topSection
         group = topSection[1+isChangedOrCancelled].strip("Hold: ").encode('utf-8')
 
         # Grab the teacher information
@@ -105,8 +105,26 @@ for task in tasks:
             'endDateTime':      endDateTime
         })
 
-    print(hourElements)
+    #print(hourElements)
 
+    def simplify (hourElements):
+        startDates = [list(group) for k, group in itertools.groupby([datetime.fromtimestamp(mktime(d['startDateTime'])) for d in hourElements], key=datetime.toordinal)]
+        endDates = [list(group) for k, group in itertools.groupby([datetime.fromtimestamp(mktime(d['endDateTime'])) for d in hourElements], key=datetime.toordinal)]
+        #print(startDates)
+        days = []
+        for i, dayStartDate in enumerate(startDates):
+            days.append(("School", "", startDates[i][0], endDates[i][-1]))
+        return days
+
+    doSimplify = 1
+    # Format: (Title, Description, StartDate, EndDate)
+    localCalendar = []
+
+    if doSimplify:
+        localCalendar = simplify(hourElements)
+    else:
+        for hourElement in hourElements:
+            
     '''
     tokenQuery = session.execute('SELECT * FROM user WHERE user_id="'+task["google_id"]+'"')
 
