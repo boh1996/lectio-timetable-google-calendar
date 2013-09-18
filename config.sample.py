@@ -1,0 +1,5 @@
+db_password = ""
+db_user     = ""
+db_host = ""
+db_database = ""
+database = "mysql+mysqldb"
