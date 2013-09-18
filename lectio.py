@@ -23,12 +23,14 @@ session.execute("CREATE TABLE IF NOT EXISTS `tasks` ( `id` int(11) NOT NULL AUTO
 
 tasks = session.execute("SELECT * FROM tasks")
 for task in tasks:
-    print("Downloading from Lectio...")
+    # Construct URL, remember to force mobile
     url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&forcemobile=1" %(task["school_id"], task["lectio_id"])
-    print(url)
-    f = urllib2.urlopen(url)
-    html = f.read()
 
+    print("Downloading from Lectio...")
+    # Download the schema from Lectio
+    html = urllib2.urlopen(url).read()
+
+    # Create a SoupStrainer scope to speed op parsing
     scope = SoupStrainer('a')
 
     print("Initializing HTML parser...")
@@ -39,6 +41,7 @@ for task in tasks:
     # Find all the class hour elements in the HTML
     classHourElements = soup.findAll('a', attrs={'class': 's2skemabrik'})
 
+    # Initialize array
     hourElements = []
 
     # Loop through all class hours elements
@@ -92,8 +95,8 @@ for task in tasks:
         # Grab the teacher information
         teacher = topSection[2+isChangedOrCancelled].split(" ")[1]
 
-        datetime.fromtimestamp(mktime(startDateTime))
-        datetime.fromtimestamp(mktime(endDateTime))
+        #datetime.fromtimestamp(mktime(startDateTime))
+        #datetime.fromtimestamp(mktime(endDateTime))
 
         hourElements.append({
             'group':            group,
