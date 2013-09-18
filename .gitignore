@@ -216,3 +216,4 @@ pip-log.txt
 .pyc
 config.py
 .idea/
+googleauth/config.py
