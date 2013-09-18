@@ -23,9 +23,10 @@ session.execute("CREATE TABLE IF NOT EXISTS `tasks` ( `id` int(11) NOT NULL AUTO
 
 tasks = session.execute("SELECT * FROM tasks")
 for task in tasks:
-    print("Reading file...")
-    # Read file (temporary feature!!!)
-    f = urllib2.urlopen("https://www.lectio.dk/lectio/" + task["school_id"] + "/SkemaNy.aspx?type=elev&elevid=" + task["lectio_id"])
+    print("Downloading from Lectio...")
+    url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&forcemobile=1" %(task["school_id"], task["lectio_id"])
+    print(url)
+    f = urllib2.urlopen(url)
     html = f.read()
 
     scope = SoupStrainer('a')
@@ -103,6 +104,7 @@ for task in tasks:
 
     print(hourElements)
 
+    '''
     tokenQuery = session.execute('SELECT * FROM user WHERE user_id="'+task["google_id"]+'"')
 
     GoogleOAuth = google_oauth.GoogleOAuth()
@@ -119,3 +121,4 @@ for task in tasks:
     content = resp.read()
 
     print(content)
+    '''
