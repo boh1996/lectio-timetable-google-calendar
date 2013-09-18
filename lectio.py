@@ -124,7 +124,9 @@ for task in tasks:
         localCalendar = simplify(hourElements)
     else:
         for hourElement in hourElements:
-            
+            localCalendar.append((hourElement['group'], "", hourElement['startDateTime'], hourElement['endDateTime']))
+    print(localCalendar)
+
     '''
     tokenQuery = session.execute('SELECT * FROM user WHERE user_id="'+task["google_id"]+'"')
 
