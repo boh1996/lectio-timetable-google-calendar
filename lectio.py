@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from googleauth import google_oauth
 import config
+from googlecalendar import calendar
 import itertools
 from bs4 import BeautifulSoup, SoupStrainer
 
@@ -86,9 +87,11 @@ for task in tasks:
         startTime = dateSections[1]
         endTime = dateSections[3]
 
+        print "%s %s CEST" % (date, startTime)
+
         # Create a time object from the date and time information
-        startDateTime = time.strptime("%s %s CEST" % (date, startTime), "%d/%m-%Y %H:%M %Z")
-        endDateTime = time.strptime("%s %s CEST" % (date, endTime), "%d/%m-%Y %H:%M %Z")
+        startDateTime = ""#time.strptime("%s %s CEST" % (date, startTime), "%d/%m-%Y %H:%M %Z")
+        endDateTime = ""#time.strptime("%s %s CEST" % (date, endTime), "%d/%m-%Y %H:%M %Z")
 
         # Grab the group information
         #print topSection
@@ -123,7 +126,7 @@ for task in tasks:
             days.append(("School", "", startDates[i][0], endDates[i][-1]))
         return days
 
-    doSimplify = 1
+    doSimplify = 0
     # Format: (Title, Description, StartDate, EndDate, Room)
     localCalendar = []
 
@@ -134,7 +137,6 @@ for task in tasks:
             localCalendar.append((hourElement['group'], "", hourElement['startDateTime'], hourElement['endDateTime'], hourElement['room']))
     print(localCalendar)
 
-    '''
     tokenQuery = session.execute('SELECT * FROM user WHERE user_id="'+task["google_id"]+'"')
 
     GoogleOAuth = google_oauth.GoogleOAuth()
@@ -144,11 +146,7 @@ for task in tasks:
         accessTokenData = GoogleOAuth.refresh(refreshToken)
         accessToken = accessTokenData.access_token
 
-    url = 'https://www.googleapis.com/calendar/v3/calendars/%s/events?key=%s' % (task["calendar_id"], accessToken)
-    print(url)
-    req = urllib2.Request(url)
-    resp = urllib2.urlopen(req)
-    content = resp.read()
+    GoogleCalendar = calendar.GoogleCalendar()
+    GoogleCalendar.access_token = accessToken
 
-    print(content)
-    '''
+    googleEvents = GoogleCalendar.events(task["calendar_id"])
