@@ -4,6 +4,7 @@ from time import mktime
 from datetime import datetime
 import urllib
 import sqlalchemy
+from dateutil import parser
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from googleauth import google_oauth
@@ -89,8 +90,8 @@ for task in tasks:
         endTime = dateSections[3]
 
         # Create a time object from the date and time information
-        startDateTime = ""#time.strptime("%s %s CEST" % (date, startTime), "%d/%m-%Y %H:%M %Z")
-        endDateTime = ""#time.strptime("%s %s CEST" % (date, endTime), "%d/%m-%Y %H:%M %Z")
+        startDateTime = parser.parse("%s %s CEST" % (date, startTime))
+        endDateTime = parser.parse("%s %s CEST" % (date, endTime))
 
         # Grab the group information
         #print topSection
