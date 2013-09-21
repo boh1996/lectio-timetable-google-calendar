@@ -16,6 +16,9 @@ from bs4 import BeautifulSoup, SoupStrainer
 
 __author__ = 'frederik'
 
+def sameEvent (googleEvent, localEvent):
+    return (calendar.timegm(googleEvent["start"]["datetime"].utctimetuple()) == calendar.timegm(localEvent["startDateTime"].utctimetuple()) and calendar.timegm(googleEvent["end"]["datetime"].utctimetuple()) == calendar.timegm(localEvent["endDateTime"].utctimetuple()))
+
 # Crete the database Engine
 engine = create_engine(config.database+'://'+config.db_user+':'+config.db_password+'@'+config.db_host+'/'+config.db_database)
 
@@ -151,11 +154,18 @@ for task in tasks:
 
     googleEvents = GoogleCalendar.events(task["calendar_id"])
 
+    # Sync local -> Google
     for localEvent in localCalendar:
         found = False
 
         for googleEvent in googleEvent["items"]:
-            if calendar.timegm(googleEvent["start"]["datetime"].utctimetuple()) == calendar.timegm(localEvent["startDateTime"].utctimetuple()):
+            if sameEvent(googleEvent,localEvent):
                 found = True
 
+        if found == False:
+            
+
+    # Sync Google -> Local
+    for googleEvent in googleEvents:
+        for localEvent in localCalendar:
 
