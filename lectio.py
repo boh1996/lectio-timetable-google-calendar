@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup, SoupStrainer
 
 __author__ = 'frederik'
 
+# Crete the database Engine
 engine = create_engine(config.database+'://'+config.db_user+':'+config.db_password+'@'+config.db_host+'/'+config.db_database)
 
 Session = sessionmaker(bind=engine)
@@ -20,7 +21,8 @@ Session = sessionmaker(bind=engine)
 # create a Session
 session = Session()
 
-session.execute("CREATE TABLE IF NOT EXISTS `tasks` ( `id` int(11) NOT NULL AUTO_INCREMENT, `google_id` varchar(80) DEFAULT NULL, `lectio_id` varchar(80) DEFAULT NULL, `school_id` varchar(45) DEFAULT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1")
+# Create the tasks table, if it doesn't exist
+session.execute("CREATE TABLE IF NOT EXISTS `tasks` ( `id` int(11) NOT NULL AUTO_INCREMENT, `calendar_id` varchar(80) DEFAULT NULL, `google_id` varchar(80) DEFAULT NULL, `lectio_id` varchar(80) DEFAULT NULL, `school_id` varchar(45) DEFAULT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1")
 
 tasks = session.execute("SELECT * FROM tasks")
 for task in tasks:
@@ -95,6 +97,10 @@ for task in tasks:
         # Grab the teacher information
         teacher = topSection[2+isChangedOrCancelled].split(" ")[1]
 
+        # Grab the room, and remove random info
+        if not "rer:" in topSection[3+isChangedOrCancelled]:
+            room = topSection[3+isChangedOrCancelled].strip("Lokale: ").encode('utf-8').replace("r: ","")
+
         #datetime.fromtimestamp(mktime(startDateTime))
         #datetime.fromtimestamp(mktime(endDateTime))
 
@@ -102,7 +108,8 @@ for task in tasks:
             'group':            group,
             'teacher':          teacher,
             'startDateTime':    startDateTime,
-            'endDateTime':      endDateTime
+            'endDateTime':      endDateTime,
+            "room":             room
         })
 
     #print(hourElements)
@@ -117,14 +124,14 @@ for task in tasks:
         return days
 
     doSimplify = 1
-    # Format: (Title, Description, StartDate, EndDate)
+    # Format: (Title, Description, StartDate, EndDate, Room)
     localCalendar = []
 
     if doSimplify:
         localCalendar = simplify(hourElements)
     else:
         for hourElement in hourElements:
-            localCalendar.append((hourElement['group'], "", hourElement['startDateTime'], hourElement['endDateTime']))
+            localCalendar.append((hourElement['group'], "", hourElement['startDateTime'], hourElement['endDateTime'], hourElement['room']))
     print(localCalendar)
 
     '''
@@ -137,7 +144,7 @@ for task in tasks:
         accessTokenData = GoogleOAuth.refresh(refreshToken)
         accessToken = accessTokenData.access_token
 
-    url = 'https://www.googleapis.com/calendar/v3/calendars/%s/events?key=%s' % (config.lectio.calendarId, accessToken)
+    url = 'https://www.googleapis.com/calendar/v3/calendars/%s/events?key=%s' % (task["calendar_id"], accessToken)
     print(url)
     req = urllib2.Request(url)
     resp = urllib2.urlopen(req)
