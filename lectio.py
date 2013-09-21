@@ -16,8 +16,11 @@ from bs4 import BeautifulSoup, SoupStrainer
 
 __author__ = 'frederik'
 
+def createTitle (localEvent):
+    return localEvent["group"] + " - " + localEvent["teacher"] + " - " + localEvent["room"]
+
 def sameEvent (googleEvent, localEvent):
-    return (calendar.timegm(googleEvent["start"]["datetime"].utctimetuple()) == calendar.timegm(localEvent["startDateTime"].utctimetuple()) and calendar.timegm(googleEvent["end"]["datetime"].utctimetuple()) == calendar.timegm(localEvent["endDateTime"].utctimetuple()))
+    return (calendar.timegm(googleEvent["start"]["datetime"].utctimetuple()) == calendar.timegm(localEvent["startDateTime"].utctimetuple()) and calendar.timegm(googleEvent["end"]["datetime"].utctimetuple()) == calendar.timegm(localEvent["endDateTime"].utctimetuple()) and googleEvent["summary"] == createTitle(localEvent))
 
 # Crete the database Engine
 engine = create_engine(config.database+'://'+config.db_user+':'+config.db_password+'@'+config.db_host+'/'+config.db_database)
@@ -163,9 +166,20 @@ for task in tasks:
                 found = True
 
         if found == False:
+            GoogleCalendar.insertEvent(task["calendar_id"],{
+                "start" : {"dateTime" : localEvent["startDateTime"]},
+                "end" : {"dateTime" : localEvent["endDateTime"]},
+                "description" : createTitle(localEvent),
+                "summary" : createTitle(localEvent)
+            })
             
 
     # Sync Google -> Local
     for googleEvent in googleEvents:
+        found = False
         for localEvent in localCalendar:
+            if sameEvent(googleEvent, localEvent):
+                found = True
 
+        if found == False:
+            GoogleCalendar.delete(task["calendar_id"], googleEvent["id"])
