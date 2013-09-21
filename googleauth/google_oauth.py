@@ -51,7 +51,6 @@ class GoogleOAuth:
             return False
 
     def refresh (self,refresh_token):
-        print refresh_token
         params = urllib.urlencode({
             "refresh_token" : refresh_token,
             "client_id" : config.client_id,

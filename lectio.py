@@ -8,7 +8,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from googleauth import google_oauth
 import config
-from googlecalendar import calendar
+import calendar
+from googlecalendar import calendar as GoogleCalendar
 import itertools
 from bs4 import BeautifulSoup, SoupStrainer
 
@@ -87,8 +88,6 @@ for task in tasks:
         startTime = dateSections[1]
         endTime = dateSections[3]
 
-        print "%s %s CEST" % (date, startTime)
-
         # Create a time object from the date and time information
         startDateTime = ""#time.strptime("%s %s CEST" % (date, startTime), "%d/%m-%Y %H:%M %Z")
         endDateTime = ""#time.strptime("%s %s CEST" % (date, endTime), "%d/%m-%Y %H:%M %Z")
@@ -146,7 +145,16 @@ for task in tasks:
         accessTokenData = GoogleOAuth.refresh(refreshToken)
         accessToken = accessTokenData.access_token
 
-    GoogleCalendar = calendar.GoogleCalendar()
+    GoogleCalendar = GoogleCalendar.GoogleCalendar()
     GoogleCalendar.access_token = accessToken
 
     googleEvents = GoogleCalendar.events(task["calendar_id"])
+
+    for localEvent in localCalendar:
+        found = False
+
+        for googleEvent in googleEvent["items"]:
+            if calendar.timegm(googleEvent["start"]["datetime"].utctimetuple()) == calendar.timegm(localEvent["startDateTime"].utctimetuple()):
+                found = True
+
+
