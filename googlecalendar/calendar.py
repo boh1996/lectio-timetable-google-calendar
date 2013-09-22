@@ -4,6 +4,7 @@ import variables
 import json
 import urllib2
 import requests
+import urlbuilder
 
 class GoogleCalendar:
     access_token = ""
@@ -13,9 +14,12 @@ class GoogleCalendar:
 
     #TODO:
     # * Add parameters
-    def events (self, calendar_id):
+    def events (self, calendar_id, params = "NULL"):
         url = urls.google_api_base_url + "calendars/{calendarId}/events" + "?" + variables.access_token_parameter + "=" + self.access_token
         url = url.replace("{calendarId}", calendar_id)
+
+        if params != "NULL":
+            url = url + urlbuilder.get(params)
 
         f = urllib.urlopen(url)
         response = f.read()
