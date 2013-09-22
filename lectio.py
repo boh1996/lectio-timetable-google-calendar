@@ -3,7 +3,7 @@ import time
 from time import mktime
 from datetime import datetime
 from dateutil import parser
-import pytz
+from pytz import timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from googleauth import google_oauth
@@ -25,10 +25,6 @@ def sameEvent (googleEvent, localEvent):
     endTuple = datetime.utctimetuple(localEvent["endDateTime"])
     return (calendar.timegm(parser.parse(googleEvent["start"]["dateTime"]).utctimetuple()) == calendar.timegm(startTuple) and calendar.timegm(parser.parse(googleEvent["end"]["dateTime"]).utctimetuple()) == calendar.timegm(endTuple) and googleEvent["summary"] == createTitle(localEvent))
 
-def currentWeekInt ():
-    today = datetime.date(datetime.now(pytz.UTC))
-    return int(today.strftime("%U%Y"))
-
 # Crete the database Engine
 engine = create_engine(config.database+'://'+config.db_user+':'+config.db_password+'@'+config.db_host+'/'+config.db_database)
 
@@ -42,11 +38,11 @@ session.execute("CREATE TABLE IF NOT EXISTS `tasks` ( `id` int(11) NOT NULL AUTO
 
 tasks = session.execute("SELECT * FROM tasks")
 for task in tasks:
-    today = datetime.date(datetime.now(pytz.UTC))
-    week =  int(today.strftime("%U"))
+    weekDateTime = datetime.date(datetime.now(timezone('Europe/Copenhagen')))
+    week =  int(weekDateTime.strftime("%U"))
 
     # Construct URL, remember to force mobile
-    url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&forcemobile=1&week=%i" %(task["school_id"], task["lectio_id"], currentWeekInt())
+    url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&forcemobile=1&week=%i" %(task["school_id"], task["lectio_id"], week)
 
     print("Downloading from Lectio...")
     # Download the schema from Lectio
@@ -167,14 +163,16 @@ for task in tasks:
     GoogleCalendar = GoogleCalendar.GoogleCalendar()
     GoogleCalendar.access_token = accessToken
 
+    endDayOfWeek = int(datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w'))).strftime("%j"))+6
+
     googleEvents = GoogleCalendar.events(task["calendar_id"], {
-        "timeZone" : "Europe/Copenhagen",
-        "timeMin" : time.asctime(time.strptime(today.strftime("%Y") + ' ' + week + ' 1', '%Y %W %w')),
-        "timeMax" : time.asctime(time.strptime(today.strftime("%Y") + ' ' + week + ' 7 23:59:59', '%Y %W %w %H:%M:%S'))
+        "timeZone" : "0200",
+        "timeMin" : datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w'))).strftime('%Y-%m-%dT%H:%M:%S.000-0200'),
+        "timeMax" : datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + " "+ str(endDayOfWeek), '%Y %j'))).strftime('%Y-%m-%dT%H:%M:%S.000-0200')
     })
 
     # Sync local -> Google
-    '''for localEvent in localCalendar:
+    for localEvent in localCalendar:
         found = False
 
         for googleEvent in googleEvents["items"]:
@@ -201,4 +199,4 @@ for task in tasks:
                 found = True
 
         if found == False:
-            GoogleCalendar.deleteEvent(task["calendar_id"], googleEvent["id"])'''
+            GoogleCalendar.deleteEvent(task["calendar_id"], googleEvent["id"])

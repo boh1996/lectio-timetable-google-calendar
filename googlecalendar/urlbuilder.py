@@ -1,6 +1,5 @@
 def get (params):
     url = ""
-    for key, value in params:
-        url = url + "&" + key + "=" + value
-
+    for key in params:
+        url = url + "&" + key + "=" + params[key]
     return  url
