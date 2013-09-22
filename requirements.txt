@@ -1,0 +1,6 @@
+python-dateutil
+pytz
+sqlalchemy
+requests
+BeautifulSoup4
+mysql-python
