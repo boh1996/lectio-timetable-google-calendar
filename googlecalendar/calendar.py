@@ -2,6 +2,8 @@ import urls
 import urllib
 import variables
 import json
+import urllib2
+import requests
 
 class GoogleCalendar:
     access_token = ""
@@ -28,10 +30,10 @@ class GoogleCalendar:
         url = urls.google_api_base_url + "calendars/{calendarId}/events" + "?" + variables.access_token_parameter + "=" + self.access_token
         url = url.replace("{calendarId}", calendar_id)
 
-        f = urllib.urlopen(url, params)
-        response = f.read()
+        f = requests.post(url, data=json.dumps(params), headers={'content-type': 'application/json'})
+        response = f.json()
 
-        return json.loads(response)
+        return response
 
     def deleteEvent (self, calendar_id, event_id):
         url = urls.google_api_base_url + "calendars/{calendarId}/events/{eventId}" + "?" + variables.access_token_parameter + "=" + self.access_token

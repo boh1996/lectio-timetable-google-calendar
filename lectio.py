@@ -2,9 +2,8 @@ import urllib2
 import time
 from time import mktime
 from datetime import datetime
-import urllib
-import sqlalchemy
 from dateutil import parser
+import pytz
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from googleauth import google_oauth
@@ -12,6 +11,7 @@ import config
 import calendar
 from googlecalendar import calendar as GoogleCalendar
 import itertools
+from datetime import *
 from bs4 import BeautifulSoup, SoupStrainer
 
 __author__ = 'frederik'
@@ -20,7 +20,13 @@ def createTitle (localEvent):
     return localEvent["group"] + " - " + localEvent["teacher"] + " - " + localEvent["room"]
 
 def sameEvent (googleEvent, localEvent):
-    return (calendar.timegm(googleEvent["start"]["datetime"].utctimetuple()) == calendar.timegm(localEvent["startDateTime"].utctimetuple()) and calendar.timegm(googleEvent["end"]["datetime"].utctimetuple()) == calendar.timegm(localEvent["endDateTime"].utctimetuple()) and googleEvent["summary"] == createTitle(localEvent))
+    startTuple = datetime.utctimetuple(localEvent["startDateTime"])
+    endTuple = datetime.utctimetuple(localEvent["endDateTime"])
+    return (calendar.timegm(parser.parse(googleEvent["start"]["dateTime"]).utctimetuple()) == calendar.timegm(startTuple) and calendar.timegm(parser.parse(googleEvent["end"]["dateTime"]).utctimetuple()) == calendar.timegm(endTuple) and googleEvent["summary"] == createTitle(localEvent))
+
+def currentWeekInt ():
+    today = datetime.date(datetime.now(pytz.UTC))
+    return int(today.strftime("%U%Y"))
 
 # Crete the database Engine
 engine = create_engine(config.database+'://'+config.db_user+':'+config.db_password+'@'+config.db_host+'/'+config.db_database)
@@ -31,12 +37,12 @@ Session = sessionmaker(bind=engine)
 session = Session()
 
 # Create the tasks table, if it doesn't exist
-session.execute("CREATE TABLE IF NOT EXISTS `tasks` ( `id` int(11) NOT NULL AUTO_INCREMENT, `calendar_id` varchar(80) DEFAULT NULL, `google_id` varchar(80) DEFAULT NULL, `lectio_id` varchar(80) DEFAULT NULL, `school_id` varchar(45) DEFAULT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1")
+session.execute("CREATE TABLE IF NOT EXISTS `tasks` ( `id` int(11) NOT NULL AUTO_INCREMENT, `calendar_id` varchar(255) DEFAULT NULL, `google_id` varchar(80) DEFAULT NULL, `lectio_id` varchar(80) DEFAULT NULL, `school_id` varchar(45) DEFAULT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1")
 
 tasks = session.execute("SELECT * FROM tasks")
 for task in tasks:
     # Construct URL, remember to force mobile
-    url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&forcemobile=1&week=%i" %(task["school_id"], task["lectio_id"], 382013)
+    url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&forcemobile=1&week=%i" %(task["school_id"], task["lectio_id"], currentWeekInt())
 
     print("Downloading from Lectio...")
     # Download the schema from Lectio
@@ -46,7 +52,7 @@ for task in tasks:
     scope = SoupStrainer('a')
 
     print("Initializing HTML parser...")
-    # Initializee BeautifulSoupt, the HTML parser
+    # Initializee BeautifulSoup, the HTML parser
     soup = BeautifulSoup(html, parse_only=scope)
 
     print("Parsing HTML...")
@@ -95,6 +101,8 @@ for task in tasks:
         startTime = dateSections[1]
         endTime = dateSections[3]
 
+        currentTimezone = pytz.timezone("Europe/Copenhagen")
+
         # Create a time object from the date and time information
         startDateTime = parser.parse("%s %s CEST" % (date, startTime))
         endDateTime = parser.parse("%s %s CEST" % (date, endTime))
@@ -107,11 +115,12 @@ for task in tasks:
         teacher = topSection[2+isChangedOrCancelled].split(" ")[1]
 
         # Grab the room, and remove random info
-        if not "rer:" in topSection[3+isChangedOrCancelled]:
-            room = topSection[3+isChangedOrCancelled].strip("Lokale: ").encode('utf-8').replace("r: ","")
-
-        #datetime.fromtimestamp(mktime(startDateTime))
-        #datetime.fromtimestamp(mktime(endDateTime))
+        room = ""
+        try:
+            if not "rer:" in topSection[3+isChangedOrCancelled]:
+                room = topSection[3+isChangedOrCancelled].strip("Lokale: ").encode('utf-8').replace("r: ","")
+        except IndexError:
+            pass
 
         hourElements.append({
             'group':            group,
@@ -140,8 +149,7 @@ for task in tasks:
         localCalendar = simplify(hourElements)
     else:
         for hourElement in hourElements:
-            localCalendar.append((hourElement['group'], "", hourElement['startDateTime'], hourElement['endDateTime'], hourElement['room']))
-    print(localCalendar)
+            localCalendar.append(hourElement)
 
     tokenQuery = session.execute('SELECT * FROM user WHERE user_id="'+task["google_id"]+'"')
 
@@ -161,25 +169,28 @@ for task in tasks:
     for localEvent in localCalendar:
         found = False
 
-        for googleEvent in googleEvent["items"]:
+        for googleEvent in googleEvents["items"]:
             if sameEvent(googleEvent,localEvent):
                 found = True
 
         if found == False:
+            timeZone = localEvent["startDateTime"].strftime("%z")
+            if timeZone == "":
+                timeZone = "0000"
             GoogleCalendar.insertEvent(task["calendar_id"],{
-                "start" : {"dateTime" : localEvent["startDateTime"]},
-                "end" : {"dateTime" : localEvent["endDateTime"]},
+                "start" : {"dateTime" : localEvent["startDateTime"].strftime('%Y-%m-%dT%H:%M:%S.000-')+timeZone},
+                "end" : {"dateTime" : localEvent["endDateTime"].strftime('%Y-%m-%dT%H:%M:%S.000-')+timeZone},
                 "description" : createTitle(localEvent),
                 "summary" : createTitle(localEvent)
             })
             
 
     # Sync Google -> Local
-    for googleEvent in googleEvents:
+    for googleEvent in googleEvents["items"]:
         found = False
         for localEvent in localCalendar:
             if sameEvent(googleEvent, localEvent):
                 found = True
 
         if found == False:
-            GoogleCalendar.delete(task["calendar_id"], googleEvent["id"])
+            GoogleCalendar.deleteEvent(task["calendar_id"], googleEvent["id"])
