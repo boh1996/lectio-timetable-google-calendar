@@ -45,10 +45,7 @@ class GoogleCalendar:
         url = url.replace("{calendarId}", calendar_id)
         url = url.replace("{eventId}", event_id)
 
-        f = urllib.urlopen(url)
-        response = f.read()
-
-        return json.loads(response)
+        response = requests.delete(url)
 
     #TODO:
     #  * Add maxResult, pageToken, minAccessRole and showHidden parameter

@@ -18,12 +18,16 @@ import time
 __author__ = 'frederik'
 
 def createTitle (localEvent):
-    return localEvent["group"] + " - " + localEvent["teacher"] + " - " + localEvent["room"]
+    return localEvent["group"].decode("utf8") + " - " + localEvent["teacher"].decode("utf8") + " - " + localEvent["room"].decode("utf8")
 
 def sameEvent (googleEvent, localEvent):
-    startTuple = datetime.utctimetuple(localEvent["startDateTime"])
-    endTuple = datetime.utctimetuple(localEvent["endDateTime"])
-    return (calendar.timegm(parser.parse(googleEvent["start"]["dateTime"]).utctimetuple()) == calendar.timegm(startTuple) and calendar.timegm(parser.parse(googleEvent["end"]["dateTime"]).utctimetuple()) == calendar.timegm(endTuple) and googleEvent["summary"] == createTitle(localEvent))
+    timezone("Europe/Copenhagen")
+    startTuple = localEvent["startDateTime"].utctimetuple()
+    endTuple = localEvent["endDateTime"].utctimetuple()
+    googleStartTuple = datetime.strptime(googleEvent["start"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S").utctimetuple()
+    googleEndTuple = datetime.strptime(googleEvent["end"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S").utctimetuple()
+
+    return (calendar.timegm(googleStartTuple) == calendar.timegm(startTuple) and calendar.timegm(googleEndTuple) == calendar.timegm(endTuple) and googleEvent["summary"] == createTitle(localEvent) )
 
 # Crete the database Engine
 engine = create_engine(config.database+'://'+config.db_user+':'+config.db_password+'@'+config.db_host+'/'+config.db_database)
@@ -40,38 +44,44 @@ tasks = session.execute("SELECT * FROM tasks")
 
 currentWeekDateTime = datetime.date(datetime.now(timezone('Europe/Copenhagen')))
 currentWeek = int(currentWeekDateTime.strftime("%U"))
-endWeek = currentWeek+4
+numberOfWeeks = 4
+endWeek = currentWeek+numberOfWeeks
 yearChange = False
 startYear = int(currentWeekDateTime.strftime("%Y"))
+weeks = []
+maxWeeks = int(datetime.strptime(str(startYear) + "-12-31", "%Y-%m-%d").strftime("%U"))
 
-if currentWeek+4 > 53:
-    endWeek = 1 + (currentWeek+4-53)
+for i in range (currentWeek, endWeek):
+    if i > maxWeeks:
+        weeks.append(currentWeek+numberOfWeeks-i)
+    else:
+        weeks.append(i)
+
+if currentWeek+numberOfWeeks > maxWeeks:
     yearChange = True
 
 for task in tasks:
-    for x in range(currentWeek, endWeek):
-        weekDateTime = datetime.date(datetime.now(timezone('Europe/Copenhagen')))
-        week =  int(weekDateTime.strftime("%U"))
+    for x in weeks:
         if x < currentWeek:
             year = startYear+1
         else:
             year = startYear
 
+        weekDateTime = datetime.strptime(str(startYear) + "-" + str(x) + "-" + "1", "%Y-%W-%w")
+        week =  x
+
         # Construct URL, remember to force mobile
         url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&forcemobile=1&week=%i" %(task["school_id"], task["lectio_id"], int(str(week)+str(year)))
 
-        print("Downloading from Lectio...")
         # Download the schema from Lectio
         html = urllib2.urlopen(url).read()
 
         # Create a SoupStrainer scope to speed op parsing
         scope = SoupStrainer('a')
 
-        print("Initializing HTML parser...")
         # Initializee BeautifulSoup, the HTML parser
         soup = BeautifulSoup(html, parse_only=scope)
 
-        print("Parsing HTML...")
         # Find all the class hour elements in the HTML
         classHourElements = soup.findAll('a', attrs={'class': 's2skemabrik'})
 
@@ -120,8 +130,8 @@ for task in tasks:
             currentTimezone = timezone("Europe/Copenhagen")
 
             # Create a time object from the date and time information
-            startDateTime = parser.parse("%s %s CEST" % (date, startTime))
-            endDateTime = parser.parse("%s %s CEST" % (date, endTime))
+            startDateTime = datetime.strptime("%s %s" % (date.strip(), startTime.strip()), "%d/%m-%Y %H:%M")
+            endDateTime = datetime.strptime("%s %s" % (date.strip(), endTime.strip()), "%d/%m-%Y %H:%M")
 
             # Grab the group information
             #print topSection
@@ -146,12 +156,9 @@ for task in tasks:
                 "room":             room
             })
 
-        #print(hourElements)
-
         def simplify (hourElements):
             startDates = [list(group) for k, group in itertools.groupby([datetime.fromtimestamp(mktime(d['startDateTime'])) for d in hourElements], key=datetime.toordinal)]
             endDates = [list(group) for k, group in itertools.groupby([datetime.fromtimestamp(mktime(d['endDateTime'])) for d in hourElements], key=datetime.toordinal)]
-            #print(startDates)
             days = []
             for i, dayStartDate in enumerate(startDates):
                 days.append(("School", "", startDates[i][0], endDates[i][-1]))
@@ -182,17 +189,13 @@ for task in tasks:
         endDayOfWeek = int(datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w'))).strftime("%j"))+6
 
         googleEvents = GoogleCalendar.events(task["calendar_id"], {
-            "timeZone" : "0200",
-            "timeMin" : datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w'))).strftime('%Y-%m-%dT%H:%M:%S.000-0200'),
-            "timeMax" : datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + " "+ str(endDayOfWeek), '%Y %j'))).strftime('%Y-%m-%dT%H:%M:%S.000-0200')
+            "timeZone" : "Europe/Copenhagen",
+            "timeMin" : datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w'))).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            "timeMax" : datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + " "+ str(endDayOfWeek), '%Y %j'))).strftime('%Y-%m-%dT%H:%M:%SZ')
         })
 
-        print task["calendar_id"]
-        print GoogleCalendar.access_token
-        print googleEvents
-        print row["refresh_token"]
-
         if not "items" in googleEvents:
+            print googleEvents
             continue
 
         # Sync local -> Google
@@ -204,15 +207,14 @@ for task in tasks:
                     found = True
 
             if found == False:
-                timeZone = localEvent["startDateTime"].strftime("%z")
-                if timeZone == "":
-                    timeZone = "0000"
-                GoogleCalendar.insertEvent(task["calendar_id"],{
-                    "start" : {"dateTime" : localEvent["startDateTime"].strftime('%Y-%m-%dT%H:%M:%S.000-')+timeZone},
-                    "end" : {"dateTime" : localEvent["endDateTime"].strftime('%Y-%m-%dT%H:%M:%S.000-')+timeZone},
+                print GoogleCalendar.insertEvent(task["calendar_id"],{
+                    "start" : {"timeZone" : "Europe/Copenhagen","dateTime" : localEvent["startDateTime"].strftime('%Y-%m-%dT%H:%M:%S.000')},
+                    "end" : {"timeZone" : "Europe/Copenhagen","dateTime" : localEvent["endDateTime"].strftime('%Y-%m-%dT%H:%M:%S.000')},
                     "description" : createTitle(localEvent),
-                    "summary" : createTitle(localEvent)
+                    "summary" : createTitle(localEvent),
                 })
+            else:
+                pass
 
 
         # Sync Google -> Local
