@@ -2,7 +2,6 @@ import urllib2
 import time
 from time import mktime
 from datetime import datetime
-from dateutil import parser
 from pytz import timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -13,7 +12,6 @@ from googlecalendar import calendar as GoogleCalendarObject
 import itertools
 from datetime import *
 from bs4 import BeautifulSoup, SoupStrainer
-import time
 
 __author__ = 'frederik'
 
@@ -38,12 +36,12 @@ Session = sessionmaker(bind=engine)
 session = Session()
 
 # Create the tasks table, if it doesn't exist
-session.execute("CREATE TABLE IF NOT EXISTS `tasks` ( `id` int(11) NOT NULL AUTO_INCREMENT, `calendar_id` varchar(255) DEFAULT NULL, `google_id` varchar(80) DEFAULT NULL, `lectio_id` varchar(80) DEFAULT NULL, `school_id` varchar(45) DEFAULT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1")
+session.execute("CREATE TABLE IF NOT EXISTS `tasks` ( `id` int(11) NOT NULL AUTO_INCREMENT, `calendar_id` varchar(255) DEFAULT NULL,`simplify` varchar(2) DEFAULT NULL , `google_id` varchar(80) DEFAULT NULL, `lectio_id` varchar(80) DEFAULT NULL, `school_id` varchar(45) DEFAULT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1")
 
 tasks = session.execute("SELECT * FROM tasks")
 
 currentWeekDateTime = datetime.date(datetime.now(timezone('Europe/Copenhagen')))
-currentWeek = int(currentWeekDateTime.strftime("%U"))
+currentWeek = int(currentWeekDateTime.strftime("%U"))+1
 numberOfWeeks = 4
 endWeek = currentWeek+numberOfWeeks
 yearChange = False
@@ -59,6 +57,8 @@ for i in range (currentWeek, endWeek):
 
 if currentWeek+numberOfWeeks > maxWeeks:
     yearChange = True
+
+print weeks
 
 for task in tasks:
     for x in weeks:
@@ -161,10 +161,10 @@ for task in tasks:
             endDates = [list(group) for k, group in itertools.groupby([datetime.fromtimestamp(mktime(d['endDateTime'])) for d in hourElements], key=datetime.toordinal)]
             days = []
             for i, dayStartDate in enumerate(startDates):
-                days.append(("School", "", startDates[i][0], endDates[i][-1]))
+                days.append(("School", "", startDates[i][0], endDates[i][-1], ""))
             return days
 
-        doSimplify = 0
+        doSimplify = int(task["simplify"])
         # Format: (Title, Description, StartDate, EndDate, Room)
         localCalendar = []
 
@@ -195,7 +195,6 @@ for task in tasks:
         })
 
         if not "items" in googleEvents:
-            print googleEvents
             continue
 
         # Sync local -> Google
@@ -207,7 +206,7 @@ for task in tasks:
                     found = True
 
             if found == False:
-                print GoogleCalendar.insertEvent(task["calendar_id"],{
+                GoogleCalendar.insertEvent(task["calendar_id"],{
                     "start" : {"timeZone" : "Europe/Copenhagen","dateTime" : localEvent["startDateTime"].strftime('%Y-%m-%dT%H:%M:%S.000')},
                     "end" : {"timeZone" : "Europe/Copenhagen","dateTime" : localEvent["endDateTime"].strftime('%Y-%m-%dT%H:%M:%S.000')},
                     "description" : createTitle(localEvent),
@@ -225,4 +224,5 @@ for task in tasks:
                     found = True
 
             if found == False:
+                print "Delete"
                 GoogleCalendar.deleteEvent(task["calendar_id"], googleEvent["id"])
