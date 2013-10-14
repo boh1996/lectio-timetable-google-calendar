@@ -16,7 +16,7 @@ from bs4 import BeautifulSoup, SoupStrainer
 __author__ = 'frederik'
 
 def createTitle (localEvent):
-    return localEvent["group"].decode("utf8") + " - " + localEvent["teacher"].decode("utf8") + " - " + localEvent["room"].decode("utf8")
+    return "%s - %s - %s" % (localEvent["group"].decode("utf8"), localEvent["teacher"].decode("utf8"), localEvent["room"].decode("utf8"))
 
 def sameEvent (googleEvent, localEvent):
     timezone("Europe/Copenhagen")
@@ -25,14 +25,17 @@ def sameEvent (googleEvent, localEvent):
     googleStartTuple = datetime.strptime(googleEvent["start"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S").utctimetuple()
     googleEndTuple = datetime.strptime(googleEvent["end"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S").utctimetuple()
 
-    return (calendar.timegm(googleStartTuple) == calendar.timegm(startTuple) and calendar.timegm(googleEndTuple) == calendar.timegm(endTuple) and googleEvent["summary"] == createTitle(localEvent) )
+    return (
+        calendar.timegm(googleStartTuple) == calendar.timegm(startTuple) and
+        calendar.timegm(googleEndTuple) == calendar.timegm(endTuple) and
+        googleEvent["summary"] == createTitle(localEvent)
+    )
 
 # Crete the database Engine
-engine = create_engine(config.database+'://'+config.db_user+':'+config.db_password+'@'+config.db_host+'/'+config.db_database)
+engine = create_engine("%s://%s:%s@%s/%s" % (config.database, config.db_user, config.db_password, config.db_host, config.db_database))
 
+# Create a Session
 Session = sessionmaker(bind=engine)
-
-# create a Session
 session = Session()
 
 # Create the tasks table, if it doesn't exist
@@ -49,7 +52,7 @@ startYear = int(currentWeekDateTime.strftime("%Y"))
 weeks = []
 maxWeeks = int(datetime.strptime(str(startYear) + "-12-31", "%Y-%m-%d").strftime("%U"))
 
-for i in range (currentWeek, endWeek):
+for i in range(currentWeek, endWeek):
     if i > maxWeeks:
         weeks.append(currentWeek+numberOfWeeks-i)
     else:
@@ -68,7 +71,7 @@ for task in tasks:
             year = startYear
 
         weekDateTime = datetime.strptime(str(startYear) + "-" + str(x) + "-" + "1", "%Y-%W-%w")
-        week =  x
+        week = x
 
         # Construct URL, remember to force mobile
         url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&forcemobile=1&week=%i" %(task["school_id"], task["lectio_id"], int(str(week)+str(year)))
@@ -79,7 +82,7 @@ for task in tasks:
         # Create a SoupStrainer scope to speed op parsing
         scope = SoupStrainer('a')
 
-        # Initializee BeautifulSoup, the HTML parser
+        # Initialize BeautifulSoup, the HTML parser
         soup = BeautifulSoup(html, parse_only=scope)
 
         # Find all the class hour elements in the HTML
@@ -93,7 +96,7 @@ for task in tasks:
             # Grab the title attribute containing all the information
             rawText = classHourElement['title']
 
-            # Get the "main sections" seperated by a double return \n\n
+            # Get the "main sections" separated by a double return \n\n
             mainSections = rawText.split("\n\n")
 
             # Grab the top section and split it by a single return \n
@@ -106,11 +109,11 @@ for task in tasks:
 
             # If the first item in the top section doesn't contain 'til',
             # it must be either cancelled or changed
-            if (not "til" in topSection[0]):
+            if not "til" in topSection[0]:
                 isChangedOrCancelled = 1
 
                 # If it says 'Aflyst!'
-                if (topSection[0] == "Aflyst!"):
+                if topSection[0] == "Aflyst!":
                     # It must be cancelled
                     isCancelled = True
                 else:
@@ -143,8 +146,8 @@ for task in tasks:
             # Grab the room, and remove random info
             room = ""
             try:
-                if not "rer:" in topSection[3+isChangedOrCancelled]:
-                    room = topSection[3+isChangedOrCancelled].strip("Lokale: ").encode('utf-8').replace("r: ","")
+                if not "rer:" in topSection[3 + isChangedOrCancelled]:
+                    room = topSection[3 + isChangedOrCancelled].strip("Lokale: ").encode('utf-8').replace("r: ","")
             except IndexError:
                 pass
 
@@ -165,6 +168,7 @@ for task in tasks:
             return days
 
         doSimplify = int(task["simplify"])
+
         # Format: (Title, Description, StartDate, EndDate, Room)
         localCalendar = []
 
@@ -174,7 +178,7 @@ for task in tasks:
             for hourElement in hourElements:
                 localCalendar.append(hourElement)
 
-        tokenQuery = session.execute('SELECT * FROM user WHERE user_id="'+task["google_id"]+'"')
+        tokenQuery = session.execute('SELECT * FROM user WHERE user_id="%s"' % (task["google_id"]))
 
         GoogleOAuth = google_oauth.GoogleOAuth()
 
@@ -191,7 +195,7 @@ for task in tasks:
         googleEvents = GoogleCalendar.events(task["calendar_id"], {
             "timeZone" : "Europe/Copenhagen",
             "timeMin" : datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w'))).strftime('%Y-%m-%dT%H:%M:%SZ'),
-            "timeMax" : datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + " "+ str(endDayOfWeek), '%Y %j'))).strftime('%Y-%m-%dT%H:%M:%SZ')
+            "timeMax" : datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + " " + str(endDayOfWeek), '%Y %j'))).strftime('%Y-%m-%dT%H:%M:%SZ')
         })
 
         if not "items" in googleEvents:
@@ -215,7 +219,6 @@ for task in tasks:
             else:
                 pass
 
-
         # Sync Google -> Local
         for googleEvent in googleEvents["items"]:
             found = False
@@ -223,6 +226,6 @@ for task in tasks:
                 if sameEvent(googleEvent, localEvent):
                     found = True
 
-            if found == False:
+            if not found:
                 print "Delete"
                 GoogleCalendar.deleteEvent(task["calendar_id"], googleEvent["id"])
