@@ -30,6 +30,9 @@ response_type   = "code"
 # Authentication base url
 base_url        = ""
 
+# The number of weeks to run
+numberOfWeeks = 4
+
 # Google Endpoint URLs
 google_auth_endpoint   = "https://accounts.google.com/o/oauth2/auth"
 google_token_endpoint   = "https://accounts.google.com/o/oauth2/token"
