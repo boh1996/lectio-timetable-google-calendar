@@ -13,8 +13,6 @@ import itertools
 from datetime import *
 from bs4 import BeautifulSoup, SoupStrainer
 
-__author__ = 'frederik'
-
 def createTitle (localEvent):
     return "%s - %s - %s" % (localEvent["group"].decode("utf8"), localEvent["teacher"].decode("utf8"), localEvent["room"].decode("utf8"))
 
