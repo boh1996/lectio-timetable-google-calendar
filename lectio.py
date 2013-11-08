@@ -1,5 +1,5 @@
 import urllib2
-import time
+import time as timeLib
 from time import mktime
 from datetime import datetime
 from pytz import timezone
@@ -39,7 +39,7 @@ Session = sessionmaker(bind=engine)
 session = Session()
 
 # Create the tasks table, if it doesn't exist
-session.execute("CREATE TABLE IF NOT EXISTS `tasks` ( `id` int(11) NOT NULL AUTO_INCREMENT, `calendar_id` varchar(255) DEFAULT NULL,`simplify` varchar(2) DEFAULT NULL , `google_id` varchar(80) DEFAULT NULL, `lectio_id` varchar(80) DEFAULT NULL, `school_id` varchar(45) DEFAULT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1")
+session.execute("CREATE TABLE IF NOT EXISTS `tasks` ( `id` int(11) NOT NULL AUTO_INCREMENT, `calendar_id` varchar(255) DEFAULT NULL, `last_updated` varchar(255) DEFAULT NULL,`simplify` varchar(2) DEFAULT NULL , `google_id` varchar(80) DEFAULT NULL, `lectio_id` varchar(80) DEFAULT NULL, `school_id` varchar(45) DEFAULT NULL, PRIMARY KEY (`id`)) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=latin1")
 
 # Fetch the tasks to run from the database
 tasks = session.execute("SELECT * FROM tasks")
@@ -141,11 +141,13 @@ for task in tasks:
 
             # If the first item in the top section doesn't contain 'til',
             # it must be either cancelled or changed
+
             if not "til" in topSection[0]:
                 isChangedOrCancelled = 1
 
                 # If it says 'Aflyst!'
-                if topSection[0] == "Aflyst!":
+                if "Aflyst!" in topSection[0]:
+                    print "AFLYST"
                     # It must be cancelled
                     isCancelled = True
                 else:
@@ -182,23 +184,29 @@ for task in tasks:
                     room = topSection[3 + isChangedOrCancelled].strip("Lokale: ").encode('utf-8').replace("r: ","")
             except IndexError:
                 pass
-
-            # Append the hour to the the hourElements array, in the format (Group, teacher, startDateTime, endDateTime, room)
-            hourElements.append({
-                'group':            group,
-                'teacher':          teacher,
-                'startDateTime':    startDateTime,
-                'endDateTime':      endDateTime,
-                "room":             room
-            })
+            if not isCancelled:
+                # Append the hour to the the hourElements array, in the format (Group, teacher, startDateTime, endDateTime, room)
+                hourElements.append({
+                    'group':            group,
+                    'teacher':          teacher,
+                    'startDateTime':    startDateTime,
+                    'endDateTime':      endDateTime,
+                    "room":             room
+                })
 
         # A function to simplify the number of elements in the calendar, instead of having an element for each school hour, it creates one for the whole period
         def simplify (hourElements):
-            startDates = [list(group) for k, group in itertools.groupby([datetime.fromtimestamp(mktime(d['startDateTime'])) for d in hourElements], key=datetime.toordinal)]
-            endDates = [list(group) for k, group in itertools.groupby([datetime.fromtimestamp(mktime(d['endDateTime'])) for d in hourElements], key=datetime.toordinal)]
+            startDates = [list(group) for k, group in itertools.groupby([d['startDateTime'] for d in hourElements], key=datetime.toordinal)]
+            endDates = [list(group) for k, group in itertools.groupby([d['endDateTime'] for d in hourElements], key=datetime.toordinal)]
             days = []
             for i, dayStartDate in enumerate(startDates):
-                days.append(("School", "", startDates[i][0], endDates[i][-1], ""))
+                days.append({
+                    'group': 'School',
+                    'teacher': '',
+                    'startDateTime': startDates[i][0],
+                    'endDateTime': endDates[i][-1],
+                    'room': ''
+                })
             return days
 
         # if simplify should be enabled
@@ -229,14 +237,18 @@ for task in tasks:
         GoogleCalendar = GoogleCalendarObject.GoogleCalendar()
         GoogleCalendar.access_token = accessToken
 
+        # End day
+        endDayString = datetime.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w')
+        endDayTimestamp = mktime(endDayString.timetuple())
+
         # Find the end day of the week
-        endDayOfWeek = int(datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w'))).strftime("%j"))+6
+        endDayOfWeek = int(datetime.fromtimestamp(endDayTimestamp).strftime("%j"))+6
 
         # Fetch the events from the Google Calendar for the current week
         googleEvents = GoogleCalendar.events(task["calendar_id"], {
             "timeZone" : "Europe/Copenhagen",
-            "timeMin" : datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w'))).strftime('%Y-%m-%dT%H:%M:%SZ'),
-            "timeMax" : datetime.fromtimestamp(mktime(time.strptime(weekDateTime.strftime("%Y") + " " + str(endDayOfWeek), '%Y %j'))).strftime('%Y-%m-%dT%H:%M:%SZ')
+            "timeMin" : datetime.fromtimestamp(mktime(timeLib.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w'))).strftime('%Y-%m-%dT%H:%M:%SZ'),
+            "timeMax" : datetime.fromtimestamp(mktime(timeLib.strptime(weekDateTime.strftime("%Y") + " " + str(endDayOfWeek), '%Y %j'))).strftime('%Y-%m-%dT%H:%M:%SZ')
         })
 
         # If the item attribute isn't found in the response, the Calendar doesn't exist, there for proceed to the next task
@@ -276,3 +288,9 @@ for task in tasks:
             if not found:
                 print "Delete"
                 GoogleCalendar.deleteEvent(task["calendar_id"], googleEvent["id"])
+
+        # Add Last updated timestamp
+        session.execute('UPDATE tasks SET last_updated="%s" WHERE google_id="%s"' % (str(mktime(datetime.now().timetuple()))[:-2],task["google_id"]))
+        session.commit()
+
+print "Done"
