@@ -101,12 +101,26 @@ for task in tasks:
         else:
             year = startYear
 
+        # Fetch the Google Auth information from the database
+        tokenQuery = session.execute('SELECT * FROM user WHERE user_id="%s"' % (task["google_id"]))
+
+        GoogleOAuth = google_oauth.GoogleOAuth()
+
+        userData = False
+
+        # Fetch the access token
+        for row in tokenQuery:
+            userData = row
+            refreshToken = row["refresh_token"]
+            accessTokenData = GoogleOAuth.refresh(refreshToken)
+            accessToken = accessTokenData.access_token
+
         # Calculate a datetime for the starting day of the week
         weekDateTime = datetime.strptime(str(startYear) + "-" + str(x) + "-" + "1", "%Y-%W-%w")
         week = x
 
         # Construct URL, remember to force mobile
-        url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&forcemobile=1&week=%i" %(task["school_id"], task["lectio_id"], int(str(week)+str(year)))
+        url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&forcemobile=1&week=%i" %(userData["school_id"], userData["lectio_user_id"], int(str(week)+str(year)))
 
         # Download the schema from Lectio
         html = urllib2.urlopen(url).read()
@@ -147,7 +161,6 @@ for task in tasks:
 
                 # If it says 'Aflyst!'
                 if "Aflyst!" in topSection[0]:
-                    print "AFLYST"
                     # It must be cancelled
                     isCancelled = True
                 else:
@@ -222,17 +235,6 @@ for task in tasks:
             for hourElement in hourElements:
                 localCalendar.append(hourElement)
 
-        # Fetch the Google Auth information from the database
-        tokenQuery = session.execute('SELECT * FROM user WHERE user_id="%s"' % (task["google_id"]))
-
-        GoogleOAuth = google_oauth.GoogleOAuth()
-
-        # Fetch the access token
-        for row in tokenQuery:
-            refreshToken = row["refresh_token"]
-            accessTokenData = GoogleOAuth.refresh(refreshToken)
-            accessToken = accessTokenData.access_token
-
         # Assign the access token to the Google Calendar module
         GoogleCalendar = GoogleCalendarObject.GoogleCalendar()
         GoogleCalendar.access_token = accessToken
@@ -290,7 +292,7 @@ for task in tasks:
                 GoogleCalendar.deleteEvent(task["calendar_id"], googleEvent["id"])
 
         # Add Last updated timestamp
-        session.execute('UPDATE tasks SET last_updated="%s" WHERE google_id="%s"' % (str(mktime(datetime.now().timetuple()))[:-2],task["google_id"]))
+        session.execute('UPDATE tasks SET last_updated="%s" WHERE google_id="%s"' % (str(mktime(datetime.now().timetuple()))[:-2],userData["user_id"]))
         session.commit()
 
 print "Done"
