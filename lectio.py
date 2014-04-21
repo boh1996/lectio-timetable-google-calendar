@@ -1,35 +1,35 @@
-import urllib2
 import time as timeLib
 from time import mktime
 from datetime import datetime
 from pytz import timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import proxy
 from googleauth import google_oauth
 import config
 import calendar
 from googlecalendar import calendar as GoogleCalendarObject
 import itertools
 from datetime import *
-from bs4 import BeautifulSoup, SoupStrainer
+import timetable
 
 # Creates the Calendar event title
 def createTitle (localEvent):
-    return "%s - %s - %s" % (localEvent["group"].decode("utf8"), localEvent["teacher"].decode("utf8"), localEvent["room"].decode("utf8"))
+	return "%s - %s - %s" % (localEvent["group"], localEvent["teacher"], localEvent["room"])
 
 # Compares the local event with the Google Event, using start date, end date and event summary/title
 def sameEvent (googleEvent, localEvent):
-    timezone("Europe/Copenhagen")
-    startTuple = localEvent["startDateTime"].utctimetuple()
-    endTuple = localEvent["endDateTime"].utctimetuple()
-    googleStartTuple = datetime.strptime(googleEvent["start"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S").utctimetuple()
-    googleEndTuple = datetime.strptime(googleEvent["end"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S").utctimetuple()
+	timezone("Europe/Copenhagen")
+	startTuple = localEvent["startDateTime"].utctimetuple()
+	endTuple = localEvent["endDateTime"].utctimetuple()
+	googleStartTuple = datetime.strptime(googleEvent["start"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S").utctimetuple()
+	googleEndTuple = datetime.strptime(googleEvent["end"]["dateTime"][:-6], "%Y-%m-%dT%H:%M:%S").utctimetuple()
 
-    return (
-        calendar.timegm(googleStartTuple) == calendar.timegm(startTuple) and
-        calendar.timegm(googleEndTuple) == calendar.timegm(endTuple) and
-        googleEvent["summary"] == createTitle(localEvent)
-    )
+	return (
+		calendar.timegm(googleStartTuple) == calendar.timegm(startTuple) and
+		calendar.timegm(googleEndTuple) == calendar.timegm(endTuple) and
+		googleEvent["summary"] == createTitle(localEvent)
+	)
 
 # Crete the database Engine
 engine = create_engine("%s://%s:%s@%s/%s" % (config.database, config.db_user, config.db_password, config.db_host, config.db_database))
@@ -54,9 +54,9 @@ currentWeek = int(currentWeekDateTime.strftime("%U"))+1
 numberOfWeeks = 4
 
 try:
-    numberOfWeeks = config.numberOfWeeks
+	numberOfWeeks = config.numberOfWeeks
 except BaseException:
-    pass
+	pass
 
 # The currentWeek+numberOfWeeks, it can be larger then the max number of weeks
 endWeek = currentWeek+numberOfWeeks
@@ -76,15 +76,15 @@ maxWeeks = int(datetime.strptime(str(startYear) + "-12-31", "%Y-%m-%d").strftime
 # Fill content into the 'weeks' list
 for i in range(currentWeek, endWeek):
 
-    # If the current number is larger then the maximum number of weeks, calculate the new week
-    if i > maxWeeks:
-        weeks.append(currentWeek+numberOfWeeks-i)
-    else:
-        weeks.append(i)
+	# If the current number is larger then the maximum number of weeks, calculate the new week
+	if i > maxWeeks:
+		weeks.append(currentWeek+numberOfWeeks-i)
+	else:
+		weeks.append(i)
 
 # If the year has changed, set the year changed to true
 if currentWeek+numberOfWeeks > maxWeeks:
-    yearChange = True
+	yearChange = True
 
 # Debug info
 print weeks
@@ -92,207 +92,155 @@ print weeks
 # Loop through  the tasks to run
 for task in tasks:
 
-    # Loop through the weeks for each task
-    for x in weeks:
+	# Loop through the weeks for each task
+	for x in weeks:
 
-        # If the year has to be incremented, increment it
-        if x < currentWeek:
-            year = startYear+1
-        else:
-            year = startYear
+		# If the year has to be incremented, increment it
+		if x < currentWeek:
+			year = startYear+1
+		else:
+			year = startYear
 
-        # Fetch the Google Auth information from the database
-        tokenQuery = session.execute('SELECT * FROM user WHERE user_id="%s"' % (task["google_id"]))
+		# Fetch the Google Auth information from the database
+		tokenQuery = session.execute('SELECT * FROM user WHERE user_id="%s"' % (task["google_id"]))
 
-        GoogleOAuth = google_oauth.GoogleOAuth()
+		GoogleOAuth = google_oauth.GoogleOAuth()
 
-        userData = False
+		userData = False
 
-        # Fetch the access token
-        for row in tokenQuery:
-            userData = row
-            refreshToken = row["refresh_token"]
-            accessTokenData = GoogleOAuth.refresh(refreshToken)
-            accessToken = accessTokenData.access_token
+		# Fetch the access token
+		for row in tokenQuery:
+			userData = row
+			refreshToken = row["refresh_token"]
+			accessTokenData = GoogleOAuth.refresh(refreshToken)
+			accessToken = accessTokenData.access_token
 
-        # Calculate a datetime for the starting day of the week
-        weekDateTime = datetime.strptime(str(startYear) + "-" + str(x) + "-" + "1", "%Y-%W-%w")
-        week = x
+		# Calculate a datetime for the starting day of the week
+		weekDateTime = datetime.strptime(str(startYear) + "-" + str(x) + "-" + "1", "%Y-%W-%w")
+		week = x
 
-        # Construct URL, remember to force mobile
-        url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&forcemobile=1&week=%i" %(userData["school_id"], userData["lectio_user_id"], int(str(week)+str(year)))
+		url = "https://www.lectio.dk/lectio/%s/SkemaNy.aspx?type=elev&elevid=%s&week=%s&forcemobile=0" % (userData["school_id"], userData["lectio_user_id"], str(week)+str(year))
 
-        # Download the schema from Lectio
-        html = urllib2.urlopen(url).read()
+		timeElements = []
 
-        # Create a SoupStrainer scope to speed op parsing
-        scope = SoupStrainer('a')
+		timeElements =  timetable.timetable({
+			"school_id" : userData["school_id"],
+			"student_id" : userData["lectio_user_id"]
+		}, url, int(week), int(year))["timetable"]
 
-        # Initialize BeautifulSoup, the HTML parser
-        soup = BeautifulSoup(html, parse_only=scope)
+		hourElements = []
 
-        # Find all the class hour elements in the HTML
-        classHourElements = soup.findAll('a', attrs={'class': 's2skemabrik'})
+		for element in timeElements:
+			if not element["status"] == "cancelled" and not element["startTime"] is None and not element["endTime"] is None:
+				group = ""
+				teacher = ""
 
-        # Initialize array
-        hourElements = []
+				for team in element["teams"]:
+					if group == "":
+						group = team["title"]
+					else:
+						group = group + ", " + team["title"]
 
-        # Loop through all class hours elements
-        for classHourElement in classHourElements:
-            # Grab the title attribute containing all the information
-            rawText = classHourElement['title']
+				for row in element["teachers"]:
+					if teacher == "":
+						teacher = row["abbrevation"]
+					else:
+						teacher = teacher + ", " + row["abbrevation"]
 
-            # Get the "main sections" separated by a double return \n\n
-            mainSections = rawText.split("\n\n")
+				hourElements.append({
+					"group" : group,
+					"teacher" : teacher,
+					"room" : element["location_text"],
+					"startDateTime" : element["startTime"],
+					"endDateTime" : element["endTime"]
+				})
 
-            # Grab the top section and split it by a single return \n
-            topSection = mainSections[0].split("\n")
+		# A function to simplify the number of elements in the calendar, instead of having an element for each school hour, it creates one for the whole period
+		def simplify (hourElements):
+			startDates = [list(group) for k, group in itertools.groupby([d['startDateTime'] for d in hourElements], key=datetime.toordinal)]
+			endDates = [list(group) for k, group in itertools.groupby([d['endDateTime'] for d in hourElements], key=datetime.toordinal)]
+			days = []
+			for i, dayStartDate in enumerate(startDates):
+				days.append({
+					'group': 'School',
+					'teacher': '',
+					'startDateTime': startDates[i][0],
+					'endDateTime': endDates[i][-1],
+					'room': ''
+				})
+			return days
 
-            # Initialize variables, assume that nothing is cancelled or changed
-            isChangedOrCancelled = 0
-            isCancelled = False
-            isChanged = False
+		# if simplify should be enabled
+		doSimplify = int(task["simplify"])
 
-            # If the first item in the top section doesn't contain 'til',
-            # it must be either cancelled or changed
+		# Format: (Title, Description, StartDate, EndDate, Room)
+		localCalendar = []
 
-            if not "til" in topSection[0]:
-                isChangedOrCancelled = 1
+		# If simplify is enabled for this task, simplify
+		if doSimplify:
+			localCalendar = simplify(hourElements)
+		else:
+			for hourElement in hourElements:
+				localCalendar.append(hourElement)
 
-                # If it says 'Aflyst!'
-                if "Aflyst!" in topSection[0]:
-                    # It must be cancelled
-                    isCancelled = True
-                else:
-                    # Otherwise it must be changed
-                    isChanged = True
+		# Assign the access token to the Google Calendar module
+		GoogleCalendar = GoogleCalendarObject.GoogleCalendar()
+		GoogleCalendar.access_token = accessToken
 
-            # Grab the date sections, fx: "15/5-2013 15:30 til 17:00"
-            dateSections = topSection[0+isChangedOrCancelled].split(" ")
+		# End day
+		endDayString = datetime.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w')
+		endDayTimestamp = mktime(endDayString.timetuple())
 
-            # Grab the date, being the first (0) section
-            date = dateSections[0]
+		# Find the end day of the week
+		endDayOfWeek = int(datetime.fromtimestamp(endDayTimestamp).strftime("%j"))+6
 
-            # Grab the start and end time, being the second (1) and fourth (3) section
-            startTime = dateSections[1]
-            endTime = dateSections[3]
+		# Fetch the events from the Google Calendar for the current week
+		googleEvents = GoogleCalendar.events(task["calendar_id"], {
+			"timeZone" : "Europe/Copenhagen",
+			"timeMin" : datetime.fromtimestamp(mktime(timeLib.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w'))).strftime('%Y-%m-%dT%H:%M:%SZ'),
+			"timeMax" : datetime.fromtimestamp(mktime(timeLib.strptime(weekDateTime.strftime("%Y") + " " + str(endDayOfWeek), '%Y %j'))).strftime('%Y-%m-%dT%H:%M:%SZ')
+		})
 
-            currentTimezone = timezone("Europe/Copenhagen")
+		# If the item attribute isn't found in the response, the Calendar doesn't exist, there for proceed to the next task
+		if not "items" in googleEvents:
+			continue
 
-            # Create a time object from the date and time information
-            startDateTime = datetime.strptime("%s %s" % (date.strip(), startTime.strip()), "%d/%m-%Y %H:%M")
-            endDateTime = datetime.strptime("%s %s" % (date.strip(), endTime.strip()), "%d/%m-%Y %H:%M")
+		# Sync local -> Google
+		for localEvent in localCalendar:
+			found = False
 
-            # Grab the group information
-            #print topSection
-            group = topSection[1+isChangedOrCancelled].strip("Hold: ").encode('utf-8')
+			# Loop through the Google events, and check if the local event exists, if not create it
+			for googleEvent in googleEvents["items"]:
+				if sameEvent(googleEvent,localEvent):
+					found = True
 
-            # Grab the teacher information
-            teacher = topSection[2+isChangedOrCancelled].split(" ")[1]
+			# Create the event if it doesn't exist
+			if found == False:
+				GoogleCalendar.insertEvent(task["calendar_id"],{
+					"start" : {"timeZone" : "Europe/Copenhagen","dateTime" : localEvent["startDateTime"].strftime('%Y-%m-%dT%H:%M:%S.000')},
+					"end" : {"timeZone" : "Europe/Copenhagen","dateTime" : localEvent["endDateTime"].strftime('%Y-%m-%dT%H:%M:%S.000')},
+					"description" : createTitle(localEvent),
+					"summary" : createTitle(localEvent),
+				})
+			else:
+				pass
 
-            # Grab the room, and remove random info
-            room = ""
-            try:
-                if not "rer:" in topSection[3 + isChangedOrCancelled]:
-                    room = topSection[3 + isChangedOrCancelled].strip("Lokale: ").encode('utf-8').replace("r: ","")
-            except IndexError:
-                pass
-            if not isCancelled:
-                # Append the hour to the the hourElements array, in the format (Group, teacher, startDateTime, endDateTime, room)
-                hourElements.append({
-                    'group':            group,
-                    'teacher':          teacher,
-                    'startDateTime':    startDateTime,
-                    'endDateTime':      endDateTime,
-                    "room":             room
-                })
+		# Sync Google -> Local
+		for googleEvent in googleEvents["items"]:
+			found = False
 
-        # A function to simplify the number of elements in the calendar, instead of having an element for each school hour, it creates one for the whole period
-        def simplify (hourElements):
-            startDates = [list(group) for k, group in itertools.groupby([d['startDateTime'] for d in hourElements], key=datetime.toordinal)]
-            endDates = [list(group) for k, group in itertools.groupby([d['endDateTime'] for d in hourElements], key=datetime.toordinal)]
-            days = []
-            for i, dayStartDate in enumerate(startDates):
-                days.append({
-                    'group': 'School',
-                    'teacher': '',
-                    'startDateTime': startDates[i][0],
-                    'endDateTime': endDates[i][-1],
-                    'room': ''
-                })
-            return days
+			# Loop through the local events, to check if the Google event exists in the local calendar
+			for localEvent in localCalendar:
+				if sameEvent(googleEvent, localEvent):
+					found = True
 
-        # if simplify should be enabled
-        doSimplify = int(task["simplify"])
+			# If it doesn't, delete it from Google Calendar
+			if not found:
+				print "Delete"
+				GoogleCalendar.deleteEvent(task["calendar_id"], googleEvent["id"])
 
-        # Format: (Title, Description, StartDate, EndDate, Room)
-        localCalendar = []
-
-        # If simplify is enabled for this task, simplify
-        if doSimplify:
-            localCalendar = simplify(hourElements)
-        else:
-            for hourElement in hourElements:
-                localCalendar.append(hourElement)
-
-        # Assign the access token to the Google Calendar module
-        GoogleCalendar = GoogleCalendarObject.GoogleCalendar()
-        GoogleCalendar.access_token = accessToken
-
-        # End day
-        endDayString = datetime.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w')
-        endDayTimestamp = mktime(endDayString.timetuple())
-
-        # Find the end day of the week
-        endDayOfWeek = int(datetime.fromtimestamp(endDayTimestamp).strftime("%j"))+6
-
-        # Fetch the events from the Google Calendar for the current week
-        googleEvents = GoogleCalendar.events(task["calendar_id"], {
-            "timeZone" : "Europe/Copenhagen",
-            "timeMin" : datetime.fromtimestamp(mktime(timeLib.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w'))).strftime('%Y-%m-%dT%H:%M:%SZ'),
-            "timeMax" : datetime.fromtimestamp(mktime(timeLib.strptime(weekDateTime.strftime("%Y") + " " + str(endDayOfWeek), '%Y %j'))).strftime('%Y-%m-%dT%H:%M:%SZ')
-        })
-
-        # If the item attribute isn't found in the response, the Calendar doesn't exist, there for proceed to the next task
-        if not "items" in googleEvents:
-            continue
-
-        # Sync local -> Google
-        for localEvent in localCalendar:
-            found = False
-
-            # Loop through the Google events, and check if the local event exists, if not create it
-            for googleEvent in googleEvents["items"]:
-                if sameEvent(googleEvent,localEvent):
-                    found = True
-
-            # Create the event if it doesn't exist
-            if found == False:
-                GoogleCalendar.insertEvent(task["calendar_id"],{
-                    "start" : {"timeZone" : "Europe/Copenhagen","dateTime" : localEvent["startDateTime"].strftime('%Y-%m-%dT%H:%M:%S.000')},
-                    "end" : {"timeZone" : "Europe/Copenhagen","dateTime" : localEvent["endDateTime"].strftime('%Y-%m-%dT%H:%M:%S.000')},
-                    "description" : createTitle(localEvent),
-                    "summary" : createTitle(localEvent),
-                })
-            else:
-                pass
-
-        # Sync Google -> Local
-        for googleEvent in googleEvents["items"]:
-            found = False
-
-            # Loop through the local events, to check if the Google event exists in the local calendar
-            for localEvent in localCalendar:
-                if sameEvent(googleEvent, localEvent):
-                    found = True
-
-            # If it doesn't, delete it from Google Calendar
-            if not found:
-                print "Delete"
-                GoogleCalendar.deleteEvent(task["calendar_id"], googleEvent["id"])
-
-        # Add Last updated timestamp
-        session.execute('UPDATE tasks SET last_updated="%s" WHERE google_id="%s"' % (str(mktime(datetime.now().timetuple()))[:-2],userData["user_id"]))
-        session.commit()
+		# Add Last updated timestamp
+		session.execute('UPDATE tasks SET last_updated="%s" WHERE google_id="%s"' % (str(mktime(datetime.now().timetuple()))[:-2],userData["user_id"]))
+		session.commit()
 
 print "Done"
