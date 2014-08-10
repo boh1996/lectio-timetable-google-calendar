@@ -528,18 +528,10 @@
 			}
 		},
 		{
-			"file": "urls.py",
+			"file": "/R/LectioAPI/scrapers/timetable.py",
 			"settings":
 			{
-				"buffer_size": 4452,
-				"line_ending": "Windows"
-			}
-		},
-		{
-			"file": "timetable.py",
-			"settings":
-			{
-				"buffer_size": 9629,
+				"buffer_size": 11704,
 				"line_ending": "Windows"
 			}
 		}
@@ -612,6 +604,8 @@
 	},
 	"file_history":
 	[
+		"/R/lectio-timetable-google-calendar/lectio.py",
+		"/R/lectio-timetable-google-calendar/urls.py",
 		"/R/lectio-timetable-google-calendar/timetable.py",
 		"/R/lectio-timetable-google-calendar/proxy.py",
 		"/R/lectio-timetable-google-calendar/config.py",
@@ -737,9 +731,7 @@
 		"/R/TwitterAnalytics/application/config/pages.php",
 		"/R/TwitterAnalytics/application/config/routes.php",
 		"/R/TwitterAnalytics/application/views/templates/admin_hidden_words_list_view.php",
-		"/R/TwitterAnalytics/application/views/admin_hidden_words_view.php",
-		"/R/TwitterAnalytics/application/views/templates/admin_hiddwn_words_list_view.php",
-		"/R/TwitterAnalytics/application/views/admin_strings_to_remove_view.php"
+		"/R/TwitterAnalytics/application/views/admin_hidden_words_view.php"
 	],
 	"find":
 	{
@@ -1034,7 +1026,7 @@
 	"groups":
 	[
 		{
-			"selected": 2,
+			"selected": 1,
 			"sheets":
 			[
 				{
@@ -1049,8 +1041,8 @@
 						"selection":
 						[
 							[
-								179,
-								179
+								4392,
+								4204
 							]
 						],
 						"settings":
@@ -1148,147 +1140,28 @@
 							"sublimelinter_wrap_find": true,
 							"synced": false,
 							"syntax": "Packages/Python/Python.tmLanguage",
-							"tab_size": 4,
 							"translate_tabs_to_spaces": false
 						},
 						"translation.x": 0.0,
-						"translation.y": 0.0,
+						"translation.y": 1386.0,
 						"zoom_level": 1.0
 					},
 					"type": "text"
 				},
 				{
 					"buffer": 1,
-					"file": "urls.py",
+					"file": "/R/LectioAPI/scrapers/timetable.py",
 					"settings":
 					{
-						"buffer_size": 4452,
+						"buffer_size": 11704,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								1519,
-								1634
-							]
-						],
-						"settings":
-						{
-							"annotations":
-							[
-								"TODO",
-								"README",
-								"FIXME"
-							],
-							"csslint_options":
-							{
-								"adjoining-classes": "warning",
-								"box-model": true,
-								"box-sizing": "warning",
-								"compatible-vendor-prefixes": "warning",
-								"display-property-grouping": true,
-								"duplicate-background-images": "warning",
-								"duplicate-properties": true,
-								"empty-rules": true,
-								"errors": true,
-								"fallback-colors": "warning",
-								"floats": "warning",
-								"font-faces": "warning",
-								"font-sizes": "warning",
-								"gradients": "warning",
-								"ids": "warning",
-								"import": "warning",
-								"important": "warning",
-								"known-properties": true,
-								"outline-none": "warning",
-								"overqualified-elements": "warning",
-								"qualified-headings": "warning",
-								"regex-selectors": "warning",
-								"rules-count": "warning",
-								"shorthand": "warning",
-								"star-property-hack": "warning",
-								"text-indent": "warning",
-								"underscore-property-hack": "warning",
-								"unique-headings": "warning",
-								"universal-selector": "warning",
-								"vendor-prefix": true,
-								"zero-units": "warning"
-							},
-							"gjslint_ignore":
-							[
-								110
-							],
-							"gjslint_options":
-							[
-							],
-							"incomplete_sync": null,
-							"javascript_linter": "jshint",
-							"jshint_options":
-							{
-								"browser": true,
-								"evil": true,
-								"regexdash": true,
-								"sub": true,
-								"trailing": true,
-								"wsh": true
-							},
-							"pep8": true,
-							"pep8_ignore":
-							[
-								"E501"
-							],
-							"perl_linter": "perlcritic",
-							"pyflakes_ignore":
-							[
-							],
-							"pyflakes_ignore_import_*": true,
-							"remote_loading": false,
-							"sublimelinter": true,
-							"sublimelinter_delay": 2,
-							"sublimelinter_disable":
-							[
-							],
-							"sublimelinter_executable_map":
-							{
-							},
-							"sublimelinter_fill_outlines": false,
-							"sublimelinter_gutter_marks": true,
-							"sublimelinter_gutter_marks_theme": "simple",
-							"sublimelinter_mark_style": "none",
-							"sublimelinter_notes": false,
-							"sublimelinter_objj_check_ascii": false,
-							"sublimelinter_popup_errors_on_save": false,
-							"sublimelinter_syntax_map":
-							{
-								"C++": "c",
-								"Python Django": "python",
-								"Ruby on Rails": "ruby"
-							},
-							"sublimelinter_wrap_find": true,
-							"synced": false,
-							"syntax": "Packages/Python/Python.tmLanguage"
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"type": "text"
-				},
-				{
-					"buffer": 2,
-					"file": "timetable.py",
-					"settings":
-					{
-						"buffer_size": 9629,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								9629,
-								9629
+								9924,
+								9924
 							]
 						],
 						"settings":
@@ -1389,7 +1262,7 @@
 							"translate_tabs_to_spaces": false
 						},
 						"translation.x": 0.0,
-						"translation.y": 2945.0,
+						"translation.y": 2016.0,
 						"zoom_level": 1.0
 					},
 					"type": "text"
