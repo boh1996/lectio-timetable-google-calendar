@@ -11,23 +11,14 @@ from time import mktime
 import functions
 from pytz import timezone
 
+#s2module-bg s2time-off
+
 def sameDay ( date, dayOfWeek, week, year ):
 	theDay = datetime.fromtimestamp(mktime(time.strptime("%s %s %s %s %s" % ("12", "00", dayOfWeek , week, year),"%H %M %w %W %Y")))
 	return theDay.date() == date.date()
 
 def timetable( config, url, week, year, session = False ):
-	if session == False:
-		cookies = {}
-	else:
-		# Insert the session information from the auth function
-		cookies = {
-			"lecmobile" : "0",
-			"ASP.NET_SessionId" : session["ASP.NET_SessionId"],
-			"LastLoginUserName" : session["LastLoginUserName"],
-			"lectiogsc" : session["lectiogsc"],
-			"LectioTicket" : session["LectioTicket"]
-		}
-
+	cookies = {}
 	# Sorting settings
 	settings = {
 
@@ -57,9 +48,31 @@ def timetable( config, url, week, year, session = False ):
 	# Fetch all rows in the table
 	rows = soup.find("table", attrs={"id" : "s_m_Content_Content_SkemaNyMedNavigation_skema_skematabel"}).findAll("tr")
 
+	# Fetch module info, to make it possible to draw a complete timetable
+	moduleInfo = []
+	moduleInfoProg = re.compile(r"(?P<module_number>.*)\. (?P<start_time>.*) - (?P<end_time>.*)")
+
+	for row in soup.findAll("div", attrs={"class" : "s2module-info"}):
+		moduleInfoGroups = moduleInfoProg.match(row.text.strip().replace("modul", ""))
+		if not moduleInfoGroups is None:
+			start = moduleInfoGroups.group("start_time")
+			if len(start) < 5:
+				start = "0" + start
+
+			end = moduleInfoGroups.group("end_time")
+			if len(end) < 5:
+				end = "0" + end
+			moduleInfo.append({
+				"module" : moduleInfoGroups.group("module_number"),
+				"start" : start,
+				"end" : end
+			})
+
 	# Fetch the general information celss
 	generalInformationDays = rows[2].findAll("td")
 	generalInformation = []
+
+	holidayElements = []
 
 	# Loop through all the cells, and look for information
 	index = 0
@@ -68,19 +81,23 @@ def timetable( config, url, week, year, session = False ):
 		if index > 1:
 			row = tdRow.findAll("a")
 
+			dayOfWeek = index-1
+
+			if dayOfWeek == 7:
+				dayOfWeek = 0
+
 			# Loop over the link elements, in the cell
 			if not row == None and len(row) > 0:
 				for element in row:
 
 					# The time module uses "0" as the first week of the year
-					if week == 1:
+					if int(week) == 1:
 						timeWeek = 0
 					else:
 						# Subtract one, because 0 is the first week
-						timeWeek = week-1
+						timeWeek = int(week)-1
 
-					dayOfWeek = index-1
-					date = time.strptime("%s %s %s" % (dayOfWeek,timeWeek, year),"%w %W %Y")
+					date = time.strptime("%s %s %s" % (str(dayOfWeek),str(timeWeek), str(year)),"%w %W %Y")
 					content = element.find("div", attrs={"class" : "s2skemabrikcontent"}).findAll("span")[1]
 					div = element.find("div", attrs={"class" : "s2skemabrikcontent"})
 
@@ -93,23 +110,55 @@ def timetable( config, url, week, year, session = False ):
 
 					if href == None:
 						generalInformation.append({
-							"message" : content.text,
-							"timestamp" : date
+							"message" : unicode(content.text),
+							"date" : datetime.fromtimestamp(mktime(date)),
+							"school_id" : str(config["school_id"]),
+							"branch_id" : str(config["branch_id"]),
+							"term" : soup.find("select", attrs={"id" : "s_m_ChooseTerm_term"}).select('option[selected="selected"]')[0]["value"],
+							"week" : week,
+							"year" : year
 						})
 					else:
 						# Compile the regular expression
 						prog = re.compile(r"\/lectio\/(?P<school_id>[0-9]*)\/aktivitet\/aktivitetinfo.aspx\?id=(?P<activity_id>[0-9]*)&(?P<prev_url>.*)")
 						activityGroups = prog.match(element["href"])
 						generalInformation.append({
-							"message" : content.text,
+							"message" : unicode(content.text),
 							"activity_id" : activityGroups.group("activity_id"),
 							"status" : "changed" if "s2changed" in div["class"] else "cancelled" if "s2cancelled" in div["class"] else "normal",
-							"timestamp" : date
+							"date" : datetime.fromtimestamp(mktime(date)),
+							"school_id" : str(config["school_id"]),
+							"branch_id" : str(config["branch_id"]),
+							"term" : soup.find("select", attrs={"id" : "s_m_ChooseTerm_term"}).select('option[selected="selected"]')[0]["value"],
+							"week" : week,
+							"year" : year
 						})
 
 	# Find all the day elements
 	timeElements = []
+
+
+	headers = []
+
+	headerRows = rows[1].findAll("td")
+	headerRows.pop(0)
+	headerProg = re.compile(ur"(?P<day_name>.*) \((?P<day>.*)\/(?P<month>.*)\)")
+
+	for row in headerRows:
+		headerGroups = headerProg.match(row.text)
+		headerYear = year
+
+		if not headerGroups is None:
+			if int(week) == 1 and int(headerGroups.group("month")) == 12:
+				headerYear = str(int(year) - 1)
+
+			headers.append({
+				"day" : headerGroups.group("day_name"),
+				"date" : datetime.strptime("%s-%s-%s %s" % (functions.zeroPadding(headerGroups.group("day")), functions.zeroPadding(headerGroups.group("month")), headerYear, "12:00"), "%d-%m-%Y %H:%M")
+			})
+
 	dayElements = rows[3].findAll("td")
+	dayElements.pop(0)
 
 	# Loop over the days
 	index = 0
@@ -118,17 +167,31 @@ def timetable( config, url, week, year, session = False ):
 		# Increment the day
 		index = index+1
 
-		dayOfWeek = index-1
+		dayOfWeek = index
+
+		if dayOfWeek == 7:
+			dayOfWeek = 0
 
 		# The time module uses "0" as the first week of the year
-		if week == 1:
+		if int(week) == 1:
 			timeWeek = 0
 		else:
 			# Subtract one, because 0 is the first week
-			timeWeek = week-1
+			timeWeek = int(week)-1
 
 		# Find all the "a" tags, representing timetable elements
 		timetableElements = dayElement.findAll("a")
+
+		moduleIndex = 1
+
+		for checkElement in dayElement.findAll(attrs={"class" : "s2module-bg"}):
+			if "s2time-off" in checkElement["class"]:
+				# Get time from module info elements
+				holidayElements.append({
+					"start" : datetime.strptime("%s-%s-%s %s" % (headers[index-1]["date"].strftime("%d"), headers[index-1]["date"].strftime("%m"), headers[index-1]["date"].strftime("%Y"), moduleInfo[moduleIndex-1]["start"]), "%d-%m-%Y %H:%M"),
+					"end" : datetime.strptime("%s-%s-%s %s" % (headers[index-1]["date"].strftime("%d"), headers[index-1]["date"].strftime("%m"), headers[index-1]["date"].strftime("%Y"), moduleInfo[moduleIndex-1]["end"]), "%d-%m-%Y %H:%M")
+				})
+			moduleIndex = moduleIndex + 1
 
 		# Loop over the timetable elements
 		for timetableElement in timetableElements:
@@ -140,10 +203,13 @@ def timetable( config, url, week, year, session = False ):
 			expressions = [
 				{"type" : "private", "expression" : r"\/lectio\/(?P<school_id>[0-9]*)\/privat_aftale.aspx\?aftaleid=(?P<activity_id>[0-9]*)"},
 				{"type" : "school",  "expression" : r"\/lectio\/(?P<school_id>[0-9]*)\/aktivitet\/aktivitetinfo.aspx\?id=(?P<activity_id>[0-9]*)&(?P<prev_url>.*)"},
+				{"type" : "outgoing_censor", "expression" : r"\/lectio\/(?P<school_id>.*)\/proevehold.aspx\?type=udgcensur&outboundCensorID=(?P<outbound_censor_id>.*)&prevurl=(?P<prev_url>.*)"},
+				{"type" : "exam", "expression" : r"\/lectio\/(?P<school_id>.*)\/proevehold.aspx\?type=proevehold&ProeveholdId=(?P<test_team_id>.*)&prevurl=(?P<prev_url>.*)"}
 			]
 
 			# Loop over the expressions
 			groups = []
+			type = "other"
 			for expressionObject in expressions:
 				prog = re.compile(expressionObject["expression"])
 				if prog.match(timetableElement["href"]):
@@ -259,24 +325,55 @@ def timetable( config, url, week, year, session = False ):
 				pass
 
 			if sameDay(startTime, dayOfWeek, timeWeek, year):
-				# Add to the list
-				timeElements.append({
-					"text" : unicode(timetableElement.text),
-					"activity_id" : groups.group("activity_id"),
-					"status" : "changed" if "s2changed" in div["class"] else "cancelled" if "s2cancelled" in div["class"] else "normal",
-					"teachers" : teachers,
-					"teams" : teams,
-					"startTime" : startTime,
-					"endTime" : endTime,
-					"type" : type,
-					"location_text" : unicode(div.text),
-					"room_text" : unicode(roomText)
-				})
+				if type == "private":
+					timeElements.append({
+						"text" : unicode(timetableElement.text),
+						"activity_id" : groups.group("activity_id"),
+						"startTime" : startTime,
+						"endTime" : endTime,
+						"type" : type,
+						"school_id" : groups.group("school_id")
+					})
+				elif type == "outgoing_censor":
+					timeElements.append({
+						"text" : unicode(timetableElement.text),
+						"outbound_censor_id" : groups.group("outbound_censor_id"),
+						"startTime" : startTime,
+						"endTime" : endTime,
+						"type" : type,
+						"school_id" : groups.group("school_id")
+					})
+				elif type == "exam":
+					timeElements.append({
+						"text" : unicode(timetableElement.text),
+						"test_team_id" : groups.group("test_team_id"),
+						"startTime" : startTime,
+						"endTime" : endTime,
+						"type" : type,
+						"school_id" : groups.group("school_id")
+					})
+				elif type == "school":
+					# Add to the list
+					timeElements.append({
+						"text" : unicode(timetableElement.text),
+						"activity_id" : groups.group("activity_id"),
+						"status" : "changed" if "s2changed" in div["class"] else "cancelled" if "s2cancelled" in div["class"] else "normal",
+						"teachers" : teachers,
+						"teams" : teams,
+						"startTime" : startTime,
+						"endTime" : endTime,
+						"type" : type,
+						"location_text" : unicode(div.text),
+						"room_text" : unicode(roomText),
+						"school_id" : groups.group("school_id")
+					})
 
 	return {
 		"status" : "ok",
 		"timetable" : timeElements,
 		"information" : generalInformation,
+		"module_info" : moduleInfo,
+		"headers" : headers,
 		"term" : {
 			"value" : soup.find("select", attrs={"id" : "s_m_ChooseTerm_term"}).select('option[selected="selected"]')[0]["value"],
 			"years_string" : soup.find("select", attrs={"id" : "s_m_ChooseTerm_term"}).select('option[selected="selected"]')[0].text

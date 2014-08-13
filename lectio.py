@@ -125,7 +125,8 @@ for task in tasks:
 
 		timeElements =  timetable.timetable({
 			"school_id" : userData["school_id"],
-			"student_id" : userData["lectio_user_id"]
+			"student_id" : userData["lectio_user_id"],
+			"branch_id" : userData["branch_id"]
 		}, url, int(week), int(year))["timetable"]
 
 		hourElements = []
@@ -197,8 +198,8 @@ for task in tasks:
 		# Fetch the events from the Google Calendar for the current week
 		googleEvents = GoogleCalendar.events(task["calendar_id"], {
 			"timeZone" : "Europe/Copenhagen",
-			"timeMin" : datetime.fromtimestamp(mktime(timeLib.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1', '%Y %W %w'))).strftime('%Y-%m-%dT%H:%M:%SZ'),
-			"timeMax" : datetime.fromtimestamp(mktime(timeLib.strptime(weekDateTime.strftime("%Y") + " " + str(endDayOfWeek), '%Y %j'))).strftime('%Y-%m-%dT%H:%M:%SZ')
+			"timeMin" : datetime.fromtimestamp(mktime(timeLib.strptime(weekDateTime.strftime("%Y") + ' ' + str(week-1) + ' 1' + " 00 01 00", '%Y %W %w %H %M %S'))).strftime('%Y-%m-%dT%H:%M:%SZ'),
+			"timeMax" : datetime.fromtimestamp(mktime(timeLib.strptime(weekDateTime.strftime("%Y") + " " + str(endDayOfWeek) + " 23 59 59", '%Y %j %H %M %S'))).strftime('%Y-%m-%dT%H:%M:%SZ')
 		})
 
 		# If the item attribute isn't found in the response, the Calendar doesn't exist, there for proceed to the next task
